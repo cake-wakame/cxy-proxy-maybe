@@ -34,7 +34,7 @@ app.get('/', (req, res) => {
 
 app.all('/proxy', async (req, res) => {
   const targetUrl = req.query.url;
-  
+
   if (!targetUrl) {
     return res.status(400).send('URL parameter is required');
   }
