@@ -14,12 +14,13 @@ const deflate = promisify(zlib.deflate);
 
 const MAX_REDIRECTS = 5;
 const MAX_BODY_SIZE = 10 * 1024 * 1024;
+const MAX_RESPONSE_SIZE = 50 * 1024 * 1024;
 
 const bufferRequestBody = async (clientReq) => {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
-    
+
     clientReq.on('data', chunk => {
       size += chunk.length;
       if (size > MAX_BODY_SIZE) {
@@ -28,20 +29,20 @@ const bufferRequestBody = async (clientReq) => {
       }
       chunks.push(chunk);
     });
-    
+
     clientReq.on('end', () => {
       resolve(Buffer.concat(chunks));
     });
-    
+
     clientReq.on('error', reject);
   });
 };
 
 const decompressResponse = async (buffer, encoding) => {
   if (!encoding) return buffer;
-  
+
   const lowerEncoding = encoding.toLowerCase();
-  
+
   try {
     if (lowerEncoding.includes('gzip') || lowerEncoding.includes('x-gzip')) {
       return await gunzip(buffer);
@@ -54,15 +55,15 @@ const decompressResponse = async (buffer, encoding) => {
     console.error('Decompression error:', error);
     return buffer;
   }
-  
+
   return buffer;
 };
 
 const compressResponse = async (buffer, encoding) => {
   if (!encoding) return buffer;
-  
+
   const lowerEncoding = encoding.toLowerCase();
-  
+
   try {
     if (lowerEncoding.includes('gzip') || lowerEncoding.includes('x-gzip')) {
       return await gzip(buffer);
@@ -75,18 +76,18 @@ const compressResponse = async (buffer, encoding) => {
     console.error('Compression error:', error);
     return buffer;
   }
-  
+
   return buffer;
 };
 
 const extractCharsetFromContentType = (contentType) => {
   if (!contentType) return null;
-  
+
   const match = contentType.match(/charset=([^;]+)/i);
   if (match && match[1]) {
     return match[1].trim().replace(/['"]/g, '');
   }
-  
+
   return null;
 };
 
@@ -118,7 +119,7 @@ const proxyRequest = async (targetUrl, clientReq, clientRes) => {
 
     try {
       const url = new URL(currentUrl);
-      
+
       const headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': clientReq.headers.accept || '*/*',
@@ -130,11 +131,11 @@ const proxyRequest = async (targetUrl, clientReq, clientRes) => {
       if (clientReq.headers.cookie) {
         headers['Cookie'] = clientReq.headers.cookie;
       }
-      
+
       if (clientReq.headers.authorization) {
         headers['Authorization'] = clientReq.headers.authorization;
       }
-      
+
       if (clientReq.headers['content-type'] && requestBody) {
         headers['Content-Type'] = clientReq.headers['content-type'];
       }
@@ -157,27 +158,29 @@ const proxyRequest = async (targetUrl, clientReq, clientRes) => {
           clientRes.status(508).send('Too many redirects');
           return;
         }
-        
+
         const locationUrl = new URL(responseHeaders.location, currentUrl);
         currentUrl = locationUrl.href;
-        
+
         if (statusCode === 303 || (statusCode === 301 || statusCode === 302) && originalMethod === 'POST') {
           originalMethod = 'GET';
           requestBody = null;
         }
-        
+
         continue;
       }
 
       clientRes.set('Cache-Control', 'no-cache, no-store, must-revalidate');
       clientRes.set('Pragma', 'no-cache');
       clientRes.set('Expires', '0');
+      clientRes.set('X-Frame-Options', 'SAMEORIGIN');
+      clientRes.set('X-Content-Type-Options', 'nosniff');
 
       const contentType = responseHeaders['content-type'] || '';
       const contentEncoding = responseHeaders['content-encoding'];
-      
+
       clientRes.status(statusCode);
-      
+
       for (const [key, value] of Object.entries(responseHeaders)) {
         if (key.toLowerCase() === 'set-cookie') {
           clientRes.set(key, value);
@@ -185,19 +188,25 @@ const proxyRequest = async (targetUrl, clientReq, clientRes) => {
           clientRes.set(key, value);
         }
       }
-      
+
       if (contentType.includes('text/html') || contentType.includes('text/css') || contentType.includes('application/xhtml+xml')) {
         const chunks = [];
+        let totalSize = 0;
         for await (const chunk of responseBody) {
+          totalSize += chunk.length;
+          if (totalSize > MAX_RESPONSE_SIZE) {
+            clientRes.status(413).send('Response body too large');
+            return;
+          }
           chunks.push(chunk);
         }
         let buffer = Buffer.concat(chunks);
-        
+
         buffer = await decompressResponse(buffer, contentEncoding);
-        
+
         const charset = extractCharsetFromContentType(contentType) || 'utf-8';
         let text;
-        
+
         try {
           if (iconv.encodingExists(charset)) {
             text = iconv.decode(buffer, charset);
@@ -208,9 +217,9 @@ const proxyRequest = async (targetUrl, clientReq, clientRes) => {
           console.error('Charset decode error:', error);
           text = buffer.toString('utf-8');
         }
-        
+
         const baseUrl = currentUrl;
-        
+
         let rewrittenText;
         let finalContentType;
         if (contentType.includes('text/html') || contentType.includes('application/xhtml+xml')) {
@@ -223,9 +232,9 @@ const proxyRequest = async (targetUrl, clientReq, clientRes) => {
           rewrittenText = text;
           finalContentType = contentType;
         }
-        
+
         clientRes.set('Content-Type', finalContentType);
-        
+
         let outputBuffer;
         try {
           if (iconv.encodingExists(charset)) {
@@ -237,12 +246,12 @@ const proxyRequest = async (targetUrl, clientReq, clientRes) => {
           console.error('Charset encode error:', error);
           outputBuffer = Buffer.from(rewrittenText, 'utf-8');
         }
-        
+
         if (contentEncoding) {
           outputBuffer = await compressResponse(outputBuffer, contentEncoding);
           clientRes.set('Content-Encoding', contentEncoding);
         }
-        
+
         clientRes.set('Content-Length', outputBuffer.length.toString());
         clientRes.send(outputBuffer);
         return;
@@ -250,7 +259,7 @@ const proxyRequest = async (targetUrl, clientReq, clientRes) => {
         if (contentEncoding) {
           clientRes.set('Content-Encoding', contentEncoding);
         }
-        
+
         for await (const chunk of responseBody) {
           clientRes.write(chunk);
         }
