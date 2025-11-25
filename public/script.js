@@ -1,24 +1,24 @@
 function loadProxy() {
   const urlInput = document.getElementById('urlInput');
   const url = urlInput.value.trim();
-  
+
   if (!url) {
     alert('URLを入力してください');
     return;
   }
-  
+
   let targetUrl = url;
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
     targetUrl = 'https://' + url;
   }
-  
+
   try {
     new URL(targetUrl);
-    
+
     const proxyUrl = `/proxy?url=${encodeURIComponent(targetUrl)}`;
-    
+
     const newWindow = window.open('about:blank', '_blank');
-    
+
     if (newWindow) {
       newWindow.document.write(`
 <!DOCTYPE html>
@@ -48,6 +48,7 @@ function loadProxy() {
       font-weight: bold;
       cursor: pointer;
       transition: background 0.2s;
+      white-space: nowrap;
     }
     .proxy-header button:hover { background: rgba(255, 255, 255, 0.3); }
     .url-display {
@@ -60,6 +61,7 @@ function loadProxy() {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      user-select: text;
     }
     iframe {
       width: 100%;
@@ -72,10 +74,27 @@ function loadProxy() {
 <body>
   <div class="proxy-header">
     <button onclick="window.history.back()">← 戻る</button>
-    <div class="url-display">about:blank</div>
+    <button onclick="goForward()">進む →</button>
+    <div class="url-display" id="currentUrlDisplay">about:blank</div>
+    <button onclick="reloadFrame()">🔄 再読込</button>
     <button onclick="window.close()">閉じる</button>
   </div>
-  <iframe src="${proxyUrl}" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-top-navigation"></iframe>
+  <iframe id="proxyFrame" src="${proxyUrl}" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"></iframe>
+  
+  <script>
+    function goForward() {
+      try {
+        window.history.forward();
+      } catch (e) {
+        console.log('Cannot go forward');
+      }
+    }
+    
+    function reloadFrame() {
+      const iframe = document.getElementById('proxyFrame');
+      iframe.src = iframe.src;
+    }
+  </script>
 </body>
 </html>
       `);
@@ -87,21 +106,6 @@ function loadProxy() {
   } catch (error) {
     alert('有効なURLを入力してください');
   }
-}
-
-function goBack() {
-  const iframe = document.getElementById('proxyFrame');
-  try {
-    iframe.contentWindow.history.back();
-  } catch (e) {
-    alert('戻れるページがありません');
-  }
-}
-
-function goHome() {
-  document.getElementById('landing-page').style.display = 'flex';
-  document.getElementById('proxy-container').style.display = 'none';
-  document.getElementById('proxyFrame').src = 'about:blank';
 }
 
 document.getElementById('urlInput').addEventListener('keypress', function(e) {
