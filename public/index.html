@@ -14,11 +14,11 @@
       <h1>🌐 Web Proxy</h1>
       <p class="subtitle">安全にウェブサイトにアクセス</p>
     </div>
-    
+
     <div class="proxy-form">
-      <input 
-        type="text" 
-        id="urlInput" 
+      <input
+        type="text"
+        id="urlInput"
         placeholder="https://example.com を入力してください"
         autocomplete="off"
       />
@@ -30,8 +30,9 @@
       <ul>
         <li>上記の入力欄にアクセスしたいURLを入力してください</li>
         <li>「アクセス」ボタンをクリックしてください</li>
-        <li>プロキシ経由でウェブサイトが表示されます</li>
-        <li>URLバーは常にabout:blankに保たれます（プライバシー保護）</li>
+        <li>プロキシ経由でウェブサイトが新しいウィンドウで表示されます</li>
+        <li>URLバーはabout:blankで開始されます（基本的なプライバシー保護）</li>
+        <li>※ サイト内のリンクをクリックするとURLが変わる場合があります</li>
       </ul>
     </div>
 
@@ -49,22 +50,9 @@
       <div class="feature">
         <span class="icon">🌍</span>
         <h4>プライバシー</h4>
-        <p>URLをabout:blankで隠蔽</p>
+        <p>about:blankで開始</p>
       </div>
     </div>
-  </div>
-
-  <div id="proxy-container" style="display: none;">
-    <div class="proxy-header">
-      <div class="proxy-controls">
-        <button id="backButton" onclick="goBack()">← 戻る</button>
-        <div class="url-display">
-          <span id="currentUrl">about:blank</span>
-        </div>
-        <button id="homeButton" onclick="goHome()">ホーム</button>
-      </div>
-    </div>
-    <iframe id="proxyFrame" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-top-navigation"></iframe>
   </div>
 
   <script src="script.js"></script>
